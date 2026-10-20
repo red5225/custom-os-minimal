@@ -24,6 +24,8 @@ jobs:
           grub-file --is-x86-multiboot2 build/kernel.elf
           file build/kernel.elf build/custom-os-minimal.iso
           xorriso -indev build/custom-os-minimal.iso -report_el_torito as_mkisofs
+          # Prevent the unsupported serial/graphics terminal setup from returning.
+          ! grep -Eqi 'terminal_(input|output).*serial|gfxterm|set gfxmode' boot/grub.cfg
       - name: Smoke test ISO with BIOS firmware
         shell: bash
         timeout-minutes: 2
@@ -34,9 +36,9 @@ jobs:
           qemu_status=$?
           set -e
           echo "QEMU BIOS exit status: ${qemu_status} (124 means timeout while guest kept running)"
-          echo "----- BIOS/GRUB/kernel serial output -----"
+          echo "----- BIOS kernel serial output -----"
           cat build/qemu-bios-serial.log || true
-          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS path did not emit KERNEL_READY; inspect trace above."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS path did not emit KERNEL_READY; inspect kernel trace above."; exit 1; }
           grep -q 'CUSTOM OS MINIMAL' build/qemu-bios-serial.log || { echo "BIOS path did not emit kernel banner."; exit 1; }
       - name: Smoke test ISO with UEFI firmware
         shell: bash
@@ -51,11 +53,9 @@ jobs:
           qemu_status=$?
           set -e
           echo "QEMU UEFI exit status: ${qemu_status} (124 means timeout while guest kept running)"
-          echo "----- UEFI/GRUB/kernel serial output -----"
+          echo "----- UEFI kernel serial output -----"
           cat build/qemu-uefi-serial.log || true
-          grep -q 'GRUB_CONFIG_LOADED' build/qemu-uefi-serial.log || { echo "UEFI did not reach the GRUB menuentry; inspect EFI boot image and config."; exit 1; }
-          grep -q 'MULTIBOOT2_LOAD_OK' build/qemu-uefi-serial.log || { echo "UEFI GRUB could not load kernel using Multiboot2."; exit 1; }
-          grep -q 'KERNEL_READY' build/qemu-uefi-serial.log || { echo "UEFI path did not emit KERNEL_READY after GRUB handoff."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-uefi-serial.log || { echo "UEFI path did not emit KERNEL_READY; inspect kernel trace above."; exit 1; }
           grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-serial.log || { echo "UEFI path did not emit kernel banner."; exit 1; }
       - name: Package ISO in ZIP
         if: success()
