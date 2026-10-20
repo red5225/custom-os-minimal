@@ -34,7 +34,7 @@ static void run_command(void)
     } else if (text_equals(command_line, "clear")) {
         console_clear();
     } else if (command_length > 0) {
-        console_write("\nUnknown command. Type help.\n");
+        console_write("\nThe shell is very limited sooooooo try another command or retry :|\n");
     }
 
     command_length = 0;
@@ -43,7 +43,7 @@ static void run_command(void)
 
 void shell_run(void)
 {
-    console_write("CUSTOM OS MINIMAL\n");
+    console_write("Welcome to my OS thingy\n");
     console_write("64-bit kernel / text shell\n");
     console_write("Type help for commands.\n");
     show_prompt();
