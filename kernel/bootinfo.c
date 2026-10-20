@@ -1,6 +1,6 @@
 #include "include/bootinfo.h"
 
-/* Read the framebuffer details that GRUB passes to the kernel. */
+/* Read framebuffer details passed by GRUB's Multiboot2 loader. */
 int bootinfo_find_framebuffer(uint32_t magic,
                               uint32_t info_address,
                               struct boot_framebuffer *out)
@@ -11,7 +11,6 @@ int bootinfo_find_framebuffer(uint32_t magic,
 
     const uint8_t *base = (const uint8_t *)(uintptr_t)info_address;
     uint32_t total_size = *(const uint32_t *)base;
-
     if (total_size < 16) {
         return 0;
     }
@@ -33,18 +32,27 @@ int bootinfo_find_framebuffer(uint32_t magic,
             out->bits_per_pixel = base[offset + 28];
             out->type = base[offset + 29];
 
-            return out->bits_per_pixel == 32 &&
-                   out->type == 1 &&
-                   out->width > 0 &&
-                   out->height > 0 &&
-                   out->pitch >= out->width * 4;
+            if (out->bits_per_pixel != 32 || out->type != 1 ||
+                out->width == 0 || out->height == 0 ||
+                out->pitch < out->width * 4u) {
+                return 0;
+            }
+
+            /* boot.S currently identity-maps physical addresses below 4 GiB. */
+            const uint64_t mapped_limit = 0x100000000ull;
+            const uint64_t byte_count = (uint64_t)out->pitch * out->height;
+            if (out->address >= mapped_limit || byte_count == 0 ||
+                byte_count > mapped_limit - out->address) {
+                return 0;
+            }
+            return 1;
         }
 
         if (type == MULTIBOOT2_TAG_END) {
             break;
         }
 
-        /* Multiboot2 tag sizes are rounded up to an eight-byte boundary. */
+        /* Multiboot2 tags are aligned to eight-byte boundaries. */
         offset = (offset + size + 7u) & ~7u;
     }
 
