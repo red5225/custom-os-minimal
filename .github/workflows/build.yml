@@ -17,16 +17,10 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86
-
-      - name: Show toolchain versions
-        run: |
-          gcc --version
-          ld --version
-          grub-mkrescue --version
-          qemu-system-x86_64 --version
+          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 zip
 
       - name: Build kernel and ISO
+        shell: bash
         run: |
           set -euxo pipefail
           make clean
@@ -35,14 +29,21 @@ jobs:
           test -s build/custom-os-minimal.iso
 
       - name: Smoke test in QEMU
+        shell: bash
         timeout-minutes: 2
         run: |
-          set -euxo pipefail
-          timeout 20s qemu-system-x86_64 \
-            -machine q35 -m 256M \
-            -cdrom build/custom-os-minimal.iso \
-            -display none -serial stdio -monitor none -no-reboot \
-            2>&1 | tee build/qemu-smoke.log || test ${PIPESTATUS[0]} -eq 124
+          set -uo pipefail
+          set +e
+          timeout 15s qemu-system-x86_64 -machine q35 -m 256M \
+            -cdrom build/custom-os-minimal.iso -display none \
+            -serial stdio -monitor none -no-reboot > build/qemu-smoke.log 2>&1
+          qemu_status=$?
+          set -e
+          cat build/qemu-smoke.log
+          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then
+            echo "QEMU exited unexpectedly with status $qemu_status"
+            exit "$qemu_status"
+          fi
           grep -q 'KERNEL_READY' build/qemu-smoke.log
           grep -q 'CUSTOM OS MINIMAL' build/qemu-smoke.log
 
@@ -51,20 +52,20 @@ jobs:
           set -euxo pipefail
           sha256sum build/custom-os-minimal.iso > build/SHA256SUMS.txt
           mkdir -p dist
-          cp build/custom-os-minimal.iso dist/custom-os-minimal.iso
-          cp build/SHA256SUMS.txt dist/SHA256SUMS.txt
+          cp build/custom-os-minimal.iso dist/
+          cp build/SHA256SUMS.txt dist/
           cd dist
           zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt
           test -s custom-os-minimal.zip
 
-      - name: Upload ISO ZIP artifact
+      - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-zip
           path: dist/custom-os-minimal.zip
           if-no-files-found: error
 
-      - name: Upload standalone ISO
+      - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-iso
