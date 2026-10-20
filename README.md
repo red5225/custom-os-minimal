@@ -1,27 +1,23 @@
 # Custom OS Minimal
 
-A tiny x86-64 freestanding kernel with a text-mode terminal. This repository is deliberately separate from `red5225/custom-os`.
+A tiny freestanding x86-64 kernel with a text terminal. GitHub Actions builds a bootable ISO and packages it in a ZIP.
 
-## What it is
+## Build output
 
-- A small kernel written in C plus a 32-bit-to-64-bit assembly boot trampoline.
-- GRUB/Multiboot2 boot path.
-- VGA text output and basic PS/2 keyboard input for a simple command prompt.
-- COM1 serial logging for automated QEMU smoke tests.
-- GitHub Actions builds `custom-os-minimal.iso`, validates the kernel's Multiboot2 header, runs a QEMU smoke test, and packages the ISO in `custom-os-minimal.zip`.
+The workflow builds `custom-os-minimal.iso` and `custom-os-minimal.zip`. The ISO is generated with GRUB's BIOS and x86-64 EFI modules where supported by the installed GRUB tools. The GRUB config prefers a text console and does not require a graphics mode.
 
-## Build locally (Debian/Ubuntu)
+Download the ZIP from the **custom-os-minimal-zip** artifact on the [Actions page](https://github.com/red5225/custom-os-minimal/actions). It contains the ISO and a SHA-256 checksum file.
 
-Install dependencies: `sudo apt-get install build-essential gcc-multilib grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86`
+## Important hardware notes
 
-Then run `make iso` and test with `make run`.
+- The kernel is a minimal Multiboot2 kernel, not a complete general-purpose operating system.
+- The terminal currently relies on legacy VGA text output and PS/2 keyboard input; UEFI firmware and modern Chromebook hardware may not expose these interfaces in the same way.
+- A successful QEMU smoke test proves the tested emulator path only. It does **not** prove that the ISO boots on the Acer Chromebook CB314-3H-C4V5.
+- For a Chromebook, boot the USB using the firmware's **UEFI** entry if available. The firmware must permit external boot, and Secure Boot may need to be disabled for an unsigned custom image.
+- The `no suitable video mode found` message is a GRUB graphics-mode issue. This configuration explicitly selects the console/text path, but hardware-specific display output still needs testing on the device.
 
 ## Terminal commands
 
-The initial prompt supports `help`, `clear`, `about`, and `reboot` (reboot depends on emulator/firmware support). It is an early kernel, not a full OS: there is no filesystem, networking, USB stack, or persistent storage yet. Keyboard input currently uses the legacy PS/2 controller, which may not be exposed by every Chromebook firmware.
+`help`, `about`, `clear`, and `reboot`.
 
-## Download
-
-Open the repository's **Actions** tab, select the latest successful **Build ISO and ZIP** run, and download the `custom-os-minimal-zip` artifact. The ZIP contains the bootable ISO and a SHA-256 checksum file.
-
-A successful CI run verifies compilation, ISO creation, and the serial-output smoke test in QEMU. It does not prove compatibility with every physical Chromebook; test in QEMU first and keep recovery firmware/media available before attempting real hardware boot.
+No filesystem, networking, USB stack, or persistent storage is implemented yet.
