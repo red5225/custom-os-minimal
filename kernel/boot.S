@@ -19,7 +19,7 @@ mb2_header_end:
 
 .macro serial_mark code
     mov $0x3F8, %dx
-    mov $\\code, %al
+    mov $\code, %al
     outb %al, %dx
 .endm
 
@@ -46,16 +46,19 @@ _start:
     mov %ebx, %esi
     serial_mark 'A'
 
+    /* Clear PML4, PDPT and all four page directories (24 KiB). */
     cld
     mov $pml4, %edi
     xor %eax, %eax
     mov $6144, %ecx
     rep stosl
 
+    /* PML4 entry 0 MUST point to the PDPT. */
     mov $pdpt, %eax
     or $3, %eax
     mov %eax, pml4
 
+    /* Four PDPT entries map four consecutive 1 GiB ranges. */
     mov $pd0, %eax
     or $3, %eax
     mov %eax, pdpt
@@ -69,6 +72,7 @@ _start:
     or $3, %eax
     mov %eax, pdpt+24
 
+    /* Fill the contiguous four page directories with 2 MiB pages. */
     xor %ecx, %ecx
 1:
     mov %ecx, %eax
@@ -79,7 +83,9 @@ _start:
     inc %ecx
     cmp $2048, %ecx
     jne 1b
+    serial_mark 'B'
 
+    /* Clear EM and TS; enable MP, PAE, OSFXSR and OSXMMEXCPT. */
     mov %cr0, %eax
     and $0xFFFFFFF3, %eax
     or $0x00000002, %eax
