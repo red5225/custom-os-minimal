@@ -31,10 +31,19 @@ check: $(BUILD)/kernel.elf
 	grub-file --is-x86-multiboot2 $(BUILD)/kernel.elf
 
 iso: check
-	mkdir -p $(BUILD)/iso-root/boot/grub
+	mkdir -p $(BUILD)/iso-root/boot/grub $(BUILD)/efi-root/EFI/BOOT
 	cp $(BUILD)/kernel.elf $(BUILD)/iso-root/boot/kernel.elf
 	cp boot/grub.cfg $(BUILD)/iso-root/boot/grub/grub.cfg
-	grub-mkrescue -o $(BUILD)/custom-os-minimal.iso $(BUILD)/iso-root
+	# Create the standard removable-media x86-64 UEFI loader path.
+	grub-mkstandalone -O x86_64-efi -o $(BUILD)/efi-root/EFI/BOOT/BOOTX64.EFI \
+	  --modules="part_gpt part_msdos fat iso9660 multiboot2 normal configfile search search_fs_uuid linux echo terminal" \
+	  "boot/grub/grub.cfg=boot/grub.cfg"
+	# A FAT EFI System Partition lets firmware find BOOTX64.EFI on USB media.
+	dd if=/dev/zero of=$(BUILD)/efiboot.img bs=1M count=16 status=none
+	mkfs.vfat $(BUILD)/efiboot.img
+	mmd -i $(BUILD)/efiboot.img ::/EFI ::/EFI/BOOT
+	mcopy -i $(BUILD)/efiboot.img $(BUILD)/efi-root/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/BOOTX64.EFI
+	grub-mkrescue -o $(BUILD)/custom-os-minimal.iso $(BUILD)/iso-root -- -volid CUSTOMOS
 
 run: iso
 	qemu-system-x86_64 -machine q35 -m 256M -cdrom $(BUILD)/custom-os-minimal.iso -serial stdio
