@@ -7,7 +7,7 @@
 #define VGA_COLUMNS 80
 #define VGA_ROWS 25
 #define VGA_ATTRIBUTE 0x0F
-#define BACKGROUND_RGB 0x00101828
+#define BACKGROUND_RGB 0xFF7D5C00
 #define TEXT_RGB 0x00FFFFFF
 
 static struct boot_framebuffer screen;
