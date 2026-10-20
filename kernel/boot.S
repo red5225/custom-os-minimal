@@ -5,6 +5,14 @@ mb2_header_start:
     .long 0
     .long mb2_header_end - mb2_header_start
     .long -(0xe85250d6 + (mb2_header_end - mb2_header_start))
+    # Request a 32-bit framebuffer; GRUB can provide this under UEFI.
+    .short 5
+    .short 0
+    .long 20
+    .long 1024
+    .long 768
+    .long 32
+    .align 8
     .short 0
     .short 0
     .long 8
@@ -14,7 +22,7 @@ mb2_header_end:
 .align 4096
 pml4: .skip 4096
 pdpt: .skip 4096
-pdir: .skip 4096
+pd:   .skip 4096
 .align 16
 stack_bottom: .skip 16384
 stack_top:
@@ -26,43 +34,41 @@ stack_top:
 _start:
     cli
     mov $stack_top, %esp
-    mov $pdir, %edi
+    # Preserve Multiboot2 magic and info pointer across mode switch.
+    mov %eax, %ebp
+    mov %ebx, %esi
+    cld
+    mov $pml4, %edi
     xor %eax, %eax
     mov $3072, %ecx
     rep stosl
-
-    mov $pdir, %eax
-    or $0x3, %eax
-    mov %eax, pdpt
     mov $pdpt, %eax
     or $0x3, %eax
     mov %eax, pml4
-
-    mov $pdir, %edi
+    mov $pd, %eax
+    or $0x3, %eax
+    mov %eax, pdpt
     xor %ecx, %ecx
 1:
     mov %ecx, %eax
     shl $21, %eax
     or $0x83, %eax
-    mov %eax, (%edi,%ecx,8)
-    movl $0, 4(%edi,%ecx,8)
+    mov %eax, (pd,%ecx,8)
+    movl $0, 4(pd,%ecx,8)
     inc %ecx
     cmp $512, %ecx
     jne 1b
-
     mov %cr4, %eax
     or $0x20, %eax
     mov %eax, %cr4
     mov $pml4, %eax
     mov %eax, %cr3
-
     mov $0xC0000080, %ecx
     rdmsr
     or $0x100, %eax
     wrmsr
-
     mov %cr0, %eax
-    or $0x80000000, %eax
+    or $0x80000001, %eax
     mov %eax, %cr0
     lgdt gdt64_pointer
     ljmp $0x08, $long_mode_start
@@ -73,11 +79,14 @@ long_mode_start:
     mov %ax, %ds
     mov %ax, %es
     mov %ax, %ss
-    xor %ax, %ax
+    xor %eax, %eax
     mov %ax, %fs
     mov %ax, %gs
     mov $stack_top, %rsp
     xor %rbp, %rbp
+    # rdi = Multiboot2 magic, rsi = info pointer
+    mov %ebp, %edi
+    mov %esi, %esi
     call kernel_main
 2:  hlt
     jmp 2b
