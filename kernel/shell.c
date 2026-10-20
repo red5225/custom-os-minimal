@@ -1,34 +1,77 @@
 #include <stddef.h>
+
 #include "include/console.h"
 #include "include/keyboard.h"
 
-static char line[80];
-static size_t length;
-static int equals(const char *a, const char *b) {
-    while (*a && *b && *a == *b) { ++a; ++b; }
-    return *a == 0 && *b == 0;
+#define COMMAND_CAPACITY 80
+
+static char command_line[COMMAND_CAPACITY];
+static size_t command_length;
+
+static int text_equals(const char *left, const char *right)
+{
+    while (*left != '\0' && *right != '\0' && *left == *right) {
+        ++left;
+        ++right;
+    }
+
+    return *left == '\0' && *right == '\0';
 }
-static void print_prompt(void) { console_write("\nXC> "); }
-static void run_command(void) {
-    line[length] = 0;
-    if (equals(line, "help")) console_write("\nCommands: help, about, clear\n");
-    else if (equals(line, "about")) console_write("\nMinimal x86-64 kernel and terminal.\n");
-    else if (equals(line, "clear")) console_clear();
-    else if (length != 0) console_write("\nUnknown command. Type help.\n");
-    length = 0;
-    print_prompt();
+
+static void show_prompt(void)
+{
+    console_write("\nxc> ");
 }
-void shell_run(void) {
-    console_write("CUSTOM OS MINIMAL\n64-BIT KERNEL / TEXT SHELL\nType help for commands.\n");
-    print_prompt();
+
+static void run_command(void)
+{
+    command_line[command_length] = '\0';
+
+    if (text_equals(command_line, "help")) {
+        console_write("\nCommands: help, about, clear\n");
+    } else if (text_equals(command_line, "about")) {
+        console_write("\nCustom OS Minimal: small x86-64 kernel and terminal.\n");
+    } else if (text_equals(command_line, "clear")) {
+        console_clear();
+    } else if (command_length > 0) {
+        console_write("\nUnknown command. Type help.\n");
+    }
+
+    command_length = 0;
+    show_prompt();
+}
+
+void shell_run(void)
+{
+    console_write("CUSTOM OS MINIMAL\n");
+    console_write("64-bit kernel / text shell\n");
+    console_write("Type help for commands.\n");
+    show_prompt();
+
     for (;;) {
-        char c = keyboard_read_char();
-        if (!c) { __asm__ volatile ("pause"); continue; }
-        if (c == '\n') { run_command(); continue; }
-        if (c == '\b') {
-            if (length) { --length; console_write("\b \b"); }
+        char key = keyboard_read_char();
+
+        if (key == 0) {
+            __asm__ volatile ("pause");
             continue;
         }
-        if (length < sizeof(line)-1) { line[length++] = c; console_putc(c); }
+
+        if (key == '\n') {
+            run_command();
+            continue;
+        }
+
+        if (key == '\b') {
+            if (command_length > 0) {
+                --command_length;
+                console_write("\b \b");
+            }
+            continue;
+        }
+
+        if (command_length < sizeof(command_line) - 1) {
+            command_line[command_length++] = key;
+            console_putc(key);
+        }
     }
 }
