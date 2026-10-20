@@ -3,8 +3,8 @@ CC := gcc
 LD := ld
 
 CFLAGS := -m64 -std=gnu11 -ffreestanding -fno-stack-protector \
-          -fno-pic -fno-pie -mno-red-zone -mcmodel=small \
-          -Wall -Wextra -O2 -Ikernel
+          -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only \
+          -mcmodel=small -Wall -Wextra -O2 -Ikernel
 ASFLAGS := -m64 -ffreestanding -fno-pic -fno-pie
 LDFLAGS := -m elf_x86_64 -T linker.ld -nostdlib
 
