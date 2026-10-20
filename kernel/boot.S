@@ -5,7 +5,7 @@ mb2_header_start:
     .long 0
     .long mb2_header_end - mb2_header_start
     .long -(0xe85250d6 + (mb2_header_end - mb2_header_start))
-    # Request a 32-bit framebuffer; GRUB can provide this under UEFI.
+    /* Ask GRUB for a 32-bit framebuffer, but the kernel can fall back to VGA. */
     .short 5
     .short 0
     .long 20
@@ -22,7 +22,7 @@ mb2_header_end:
 .align 4096
 pml4: .skip 4096
 pdpt: .skip 4096
-pd:   .skip 4096
+pd: .skip 4096
 .align 16
 stack_bottom: .skip 16384
 stack_top:
@@ -34,7 +34,7 @@ stack_top:
 _start:
     cli
     mov $stack_top, %esp
-    # Preserve Multiboot2 magic and info pointer across mode switch.
+    /* Save the Multiboot2 registers before changing CPU mode. */
     mov %eax, %ebp
     mov %ebx, %esi
     cld
@@ -43,10 +43,10 @@ _start:
     mov $3072, %ecx
     rep stosl
     mov $pdpt, %eax
-    or $0x3, %eax
+    or $3, %eax
     mov %eax, pml4
     mov $pd, %eax
-    or $0x3, %eax
+    or $3, %eax
     mov %eax, pdpt
     xor %ecx, %ecx
 1:
@@ -83,10 +83,10 @@ long_mode_start:
     mov %ax, %fs
     mov %ax, %gs
     mov $stack_top, %rsp
-    xor %rbp, %rbp
-    # rdi = Multiboot2 magic, rsi = info pointer
+    /* Multiboot2 uses EAX=magic and EBX=info pointer. Pass them as arguments. */
     mov %ebp, %edi
     mov %esi, %esi
+    xor %ebp, %ebp
     call kernel_main
 2:  hlt
     jmp 2b
@@ -100,5 +100,4 @@ gdt64_end:
 gdt64_pointer:
     .word gdt64_end - gdt64 - 1
     .quad gdt64
-
 .section .note.GNU-stack,"",@progbits
