@@ -11,7 +11,7 @@ static size_t command_length;
 
 static void show_prompt(void)
 {
-    console_write("\nxc> ");
+    console_write("\nUser> ");
 }
 
 static void submit_command(void)
