@@ -35,14 +35,8 @@ jobs:
         run: |
           set -uo pipefail
           OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
-          if [ ! -f "$OVMF_CODE" ]; then
-            OVMF_CODE="/usr/share/OVMF/OVMF_CODE_4M.fd"
-          fi
-          if [ ! -f "$OVMF_CODE" ]; then
-            echo "Could not find OVMF UEFI firmware package files"
-            find /usr/share -iname '*OVMF*fd' -print || true
-            exit 1
-          fi
+          if [ ! -f "$OVMF_CODE" ]; then OVMF_CODE="/usr/share/OVMF/OVMF_CODE_4M.fd"; fi
+          if [ ! -f "$OVMF_CODE" ]; then find /usr/share -iname '*OVMF*fd' -print || true; exit 1; fi
           set +e
           timeout 15s qemu-system-x86_64 \
             -machine q35 -m 256M \
@@ -53,19 +47,15 @@ jobs:
           qemu_status=$?
           set -e
           echo "QEMU exit status: ${qemu_status} (124 is expected for a running kernel)"
-          echo "----- serial output -----"
+          echo "----- UEFI/GRUB/kernel serial output -----"
           if [ -f build/qemu-serial.log ]; then cat build/qemu-serial.log; else echo "No serial log file"; fi
-          echo "-------------------------"
-          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then
-            echo "UEFI QEMU exited unexpectedly"; exit "$qemu_status"
-          fi
-          if [ ! -s build/qemu-serial.log ]; then
-            echo "No serial output from the kernel. This indicates boot did not reach serial initialization, or serial logging is not configured."; exit 1
-          fi
-          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Kernel did not emit KERNEL_READY."; exit 1; }
+          echo "------------------------------------------"
+          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then exit "$qemu_status"; fi
+          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Kernel did not emit KERNEL_READY; use the GRUB serial trace above to locate handoff failure."; exit 1; }
           grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log || { echo "Kernel did not emit its banner."; exit 1; }
 
       - name: Package ISO in ZIP
+        if: success()
         run: |
           set -euxo pipefail
           sha256sum build/custom-os-minimal.iso > build/SHA256SUMS.txt
@@ -76,6 +66,7 @@ jobs:
           test -s dist/custom-os-minimal.zip
 
       - name: Upload ZIP artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-zip
@@ -83,6 +74,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload ISO artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-iso
