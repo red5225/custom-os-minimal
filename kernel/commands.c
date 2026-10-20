@@ -42,8 +42,9 @@ static const char *skip_spaces(const char *text)
 static void command_about(const char *args)
 {
     (void)args;
-    console_write("\nCustom OS Minimal\n");
+    console_write("\nSmall os.\n");
     console_write("A small freestanding x86-64 kernel and command shell.\n");
+    console_write("Had AI start this so I can edit it to how I like.\n");
 }
 
 static void command_clear(const char *args)
