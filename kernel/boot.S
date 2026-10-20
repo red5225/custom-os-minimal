@@ -53,7 +53,7 @@ _start:
     mov $6144, %ecx
     rep stosl
 
-    /* PML4 entry 0 MUST point to the PDPT. */
+    /* PML4 entry 0 points to the PDPT. */
     mov $pdpt, %eax
     or $3, %eax
     mov %eax, pml4
@@ -72,17 +72,29 @@ _start:
     or $3, %eax
     mov %eax, pdpt+24
 
-    /* Fill the first page directory with 2 MiB pages (identity-map 1 GiB). */
+    /* Map 4 GiB with 2 MiB pages, including high framebuffer memory. */
+    xor %edx, %edx
+2:
+    mov $pd0, %edi
+    mov %edx, %eax
+    shl $12, %eax
+    add %eax, %edi
     xor %ecx, %ecx
 1:
     mov %ecx, %eax
     shl $21, %eax
+    mov %edx, %ebx
+    shl $30, %ebx
+    or %ebx, %eax
     or $0x83, %eax
-    mov %eax, pd0(,%ecx,8)
-    movl $0, pd0+4(,%ecx,8)
+    mov %eax, (%edi,%ecx,8)
+    movl $0, 4(%edi,%ecx,8)
     inc %ecx
     cmp $512, %ecx
     jne 1b
+    inc %edx
+    cmp $4, %edx
+    jne 2b
     serial_mark 'B'
 
     /* Clear EM and TS; enable MP, PAE, OSFXSR and OSXMMEXCPT. */
@@ -126,9 +138,9 @@ long_mode_start:
     xor %ebp, %ebp
     serial_mark 'E'
     call kernel_main
-2:
+3:
     hlt
-    jmp 2b
+    jmp 3b
 
 .align 8
 gdt64:
