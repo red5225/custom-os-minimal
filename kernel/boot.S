@@ -40,10 +40,9 @@ stack_top:
 _start:
     cli
     mov $stack_top, %esp
-    /* Preserve GRUB's Multiboot2 registers before using EAX. */
     mov %eax, %ebp
     mov %ebx, %esi
-    serial_mark 'A'             /* entered our assembly entry point */
+    serial_mark 'A'
 
     cld
     mov $pml4, %edi
@@ -68,11 +67,11 @@ _start:
     inc %ecx
     cmp $512, %ecx
     jne 1b
-    serial_mark 'B'             /* page tables complete */
+    serial_mark 'B'
 
-    /* Enable CR0 numeric/SSE state and PAE | OSFXSR | OSXMMEXCPT. */
+    /* Clear EM and TS; enable MP, PAE, OSFXSR and OSXMMEXCPT. */
     mov %cr0, %eax
-    and $0xFFFFFFFB, %eax       /* CR0.EM = 0 */
+    and $0xFFFFFFF3, %eax       /* CR0.EM = 0, CR0.TS = 0 */
     or $0x00000002, %eax        /* CR0.MP = 1 */
     mov %eax, %cr0
     mov %cr4, %eax
@@ -88,14 +87,14 @@ _start:
     mov %cr0, %eax
     or $0x80000000, %eax        /* CR0.PG */
     mov %eax, %cr0
-    serial_mark 'C'             /* paging + long mode requested */
+    serial_mark 'C'
 
     lgdt gdt64_pointer
     ljmp $0x08, $long_mode_start
 
 .code64
 long_mode_start:
-    serial_mark 'D'             /* far jump reached 64-bit code */
+    serial_mark 'D'
     mov $0x10, %ax
     mov %ax, %ds
     mov %ax, %es
@@ -109,7 +108,7 @@ long_mode_start:
     mov %ebp, %edi
     mov %esi, %esi
     xor %ebp, %ebp
-    serial_mark 'E'             /* immediately before C entry */
+    serial_mark 'E'
     call kernel_main
 2:
     hlt
