@@ -56,7 +56,7 @@ static void command_clear(const char *args)
 static void command_hi(const char *args)
 {
     (void)args;
-    console_write("\nHi! The kernel command shell is running.\n");
+    console_write("\nHi!\n");
 }
 
 static void command_version(const char *args)
@@ -81,7 +81,7 @@ static const struct shell_command command_table[] = {
     { "version", "Show OS version and architecture", command_version },
     { "clear",   "Clear the screen", command_clear },
     { "hi",      "Print a greeting", command_hi },
-    { "echo",    "Print text (example: echo hello)", command_echo }
+    { "echo",    "Print text", command_echo }
 };
 
 #define COMMAND_COUNT (sizeof(command_table) / sizeof(command_table[0]))
