@@ -33,8 +33,10 @@ static void run_command(void)
         console_write("\nCustom OS Minimal: small x86-64 kernel and terminal.\n");
     } else if (text_equals(command_line, "clear")) {
         console_clear();
-    } else if (command_length > 0) {
-        console_write("\nThe shell is very limited sooooooo try another command or retry :|\n");
+    } else if (text_equals(command_line, "hi")) {
+        console_write("hi");
+    { else if (command_length > 0) {
+        console_write("\nThe shell is very limited sooooooo try another command or retry...\n");
     }
 
     command_length = 0;
