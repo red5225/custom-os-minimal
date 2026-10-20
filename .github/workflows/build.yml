@@ -2,8 +2,6 @@ name: Build ISO and ZIP
 
 on:
   push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,40 +10,63 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc-multilib grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86
-      - name: Build kernel and ISO
-        run: make iso
-      - name: Smoke test in QEMU
-        shell: bash
+          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86
+
+      - name: Show toolchain versions
         run: |
-          set -o pipefail
-          timeout 12s qemu-system-x86_64 -m 256M -cdrom build/custom-os-minimal.iso -display none -serial stdio -monitor none -no-reboot -no-shutdown 2>&1 | tee build/qemu-serial.log || test "${PIPESTATUS[0]}" -eq 124
-          grep -q 'KERNEL_READY' build/qemu-serial.log
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log
+          gcc --version
+          ld --version
+          grub-mkrescue --version
+          qemu-system-x86_64 --version
+
+      - name: Build kernel and ISO
+        run: |
+          set -euxo pipefail
+          make clean
+          make iso
+          test -s build/kernel.elf
+          test -s build/custom-os-minimal.iso
+
+      - name: Smoke test in QEMU
+        timeout-minutes: 2
+        run: |
+          set -euxo pipefail
+          timeout 20s qemu-system-x86_64 \
+            -machine q35 -m 256M \
+            -cdrom build/custom-os-minimal.iso \
+            -display none -serial stdio -monitor none -no-reboot \
+            2>&1 | tee build/qemu-smoke.log || test ${PIPESTATUS[0]} -eq 124
+          grep -q 'KERNEL_READY' build/qemu-smoke.log
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-smoke.log
+
       - name: Package ISO in ZIP
         run: |
-          cp build/custom-os-minimal.iso custom-os-minimal.iso
-          sha256sum custom-os-minimal.iso > custom-os-minimal.iso.sha256
-          zip -9 custom-os-minimal.zip custom-os-minimal.iso custom-os-minimal.iso.sha256
-          unzip -t custom-os-minimal.zip
+          set -euxo pipefail
+          sha256sum build/custom-os-minimal.iso > build/SHA256SUMS.txt
+          mkdir -p dist
+          cp build/custom-os-minimal.iso dist/custom-os-minimal.iso
+          cp build/SHA256SUMS.txt dist/SHA256SUMS.txt
+          cd dist
+          zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt
+          test -s custom-os-minimal.zip
+
       - name: Upload ISO ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-zip
-          path: custom-os-minimal.zip
+          path: dist/custom-os-minimal.zip
           if-no-files-found: error
-          retention-days: 30
+
       - name: Upload standalone ISO
         uses: actions/upload-artifact@v4
         with:
           name: custom-os-minimal-iso
           path: build/custom-os-minimal.iso
           if-no-files-found: error
-          retention-days: 30

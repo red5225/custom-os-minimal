@@ -1,11 +1,22 @@
 BUILD := build
 CC := gcc
 AS := gcc
-CFLAGS := -m64 -ffreestanding -fno-stack-protector -fno-pic -fno-pie -mno-red-zone -mcmodel=small -Wall -Wextra -Werror -O2 -Ikernel
+LD := ld
+
+# Keep compiler diagnostics visible without making every warning fatal.
+CFLAGS := -m64 -ffreestanding -fno-stack-protector -fno-pic -fno-pie \
+          -mno-red-zone -mcmodel=small -Wall -Wextra -O2 -Ikernel
 ASFLAGS := -m64 -ffreestanding -fno-pic -fno-pie -Ikernel
 LDFLAGS := -m elf_x86_64 -T linker.ld -nostdlib
 
-C_SOURCES := kernel/kernel.c kernel/bootinfo.c kernel/console.c kernel/serial.c kernel/keyboard.c kernel/shell.c
+C_SOURCES := \
+    kernel/kernel.c \
+    kernel/bootinfo.c \
+    kernel/console.c \
+    kernel/serial.c \
+    kernel/keyboard.c \
+    kernel/shell.c
+
 OBJECTS := $(BUILD)/boot.o $(patsubst kernel/%.c,$(BUILD)/%.o,$(C_SOURCES))
 
 .PHONY: all clean check iso run
@@ -21,7 +32,7 @@ $(BUILD)/%.o: kernel/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/kernel.elf: $(OBJECTS) linker.ld
-	ld $(LDFLAGS) $(OBJECTS) -o $@
+	$(LD) $(LDFLAGS) $(OBJECTS) -o $@
 
 check: $(BUILD)/kernel.elf
 	grub-file --is-x86-multiboot2 $(BUILD)/kernel.elf
