@@ -17,7 +17,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 zip
+          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 ovmf zip
 
       - name: Build kernel and ISO
         run: |
@@ -27,32 +27,43 @@ jobs:
           test -s build/kernel.elf
           test -s build/custom-os-minimal.iso
           file build/kernel.elf build/custom-os-minimal.iso
+          grub-file --is-x86-multiboot2 build/kernel.elf
 
-      - name: Smoke test in QEMU
+      - name: Smoke test ISO with UEFI firmware
         shell: bash
         timeout-minutes: 2
         run: |
           set -uo pipefail
+          OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
+          if [ ! -f "$OVMF_CODE" ]; then
+            OVMF_CODE="/usr/share/OVMF/OVMF_CODE_4M.fd"
+          fi
+          if [ ! -f "$OVMF_CODE" ]; then
+            echo "Could not find OVMF UEFI firmware package files"
+            find /usr/share -iname '*OVMF*fd' -print || true
+            exit 1
+          fi
           set +e
-          timeout 12s qemu-system-x86_64 \
+          timeout 15s qemu-system-x86_64 \
             -machine q35 -m 256M \
+            -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
             -cdrom build/custom-os-minimal.iso \
             -display none -serial file:build/qemu-serial.log \
             -monitor none -no-reboot -no-shutdown
           qemu_status=$?
           set -e
-          echo "QEMU exit status: ${qemu_status} (124 is expected when the kernel keeps running)"
-          echo "----- QEMU serial output -----"
-          if [ -f build/qemu-serial.log ]; then cat build/qemu-serial.log; else echo "Serial log file was not created"; fi
-          echo "------------------------------"
-          # A timeout is normal for an OS shell that intentionally does not exit.
-          if [ "${qemu_status}" -ne 0 ] && [ "${qemu_status}" -ne 124 ]; then
-            echo "QEMU exited unexpectedly"
-            exit "${qemu_status}"
+          echo "QEMU exit status: ${qemu_status} (124 is expected for a running kernel)"
+          echo "----- serial output -----"
+          if [ -f build/qemu-serial.log ]; then cat build/qemu-serial.log; else echo "No serial log file"; fi
+          echo "-------------------------"
+          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then
+            echo "UEFI QEMU exited unexpectedly"; exit "$qemu_status"
           fi
-          test -s build/qemu-serial.log || { echo "No serial output: the kernel may not have reached C startup."; exit 1; }
-          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Missing KERNEL_READY marker; inspect serial output above."; exit 1; }
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log || { echo "Missing terminal banner; inspect serial output above."; exit 1; }
+          if [ ! -s build/qemu-serial.log ]; then
+            echo "No serial output from the kernel. This indicates boot did not reach serial initialization, or serial logging is not configured."; exit 1
+          fi
+          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Kernel did not emit KERNEL_READY."; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log || { echo "Kernel did not emit its banner."; exit 1; }
 
       - name: Package ISO in ZIP
         run: |
