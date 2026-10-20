@@ -53,6 +53,11 @@ _start:
     mov $6144, %ecx
     rep stosl
 
+    /* PML4 entry 0 MUST point to the PDPT. */
+    mov $pdpt, %eax
+    or $3, %eax
+    mov %eax, pml4
+
     /* Four PDPT entries map four consecutive 1 GiB ranges. */
     mov $pd0, %eax
     or $3, %eax
