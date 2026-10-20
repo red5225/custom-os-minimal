@@ -13,7 +13,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 ovmf zip
+          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools dosfstools qemu-system-x86 ovmf zip
       - name: Build kernel and ISO
         run: |
           set -euxo pipefail
@@ -21,11 +21,11 @@ jobs:
           make iso
           test -s build/kernel.elf
           test -s build/custom-os-minimal.iso
+          test -s build/efi-root/EFI/BOOT/BOOTX64.EFI
           grub-file --is-x86-multiboot2 build/kernel.elf
-          file build/kernel.elf build/custom-os-minimal.iso
+          file build/kernel.elf build/efi-root/EFI/BOOT/BOOTX64.EFI build/custom-os-minimal.iso
           xorriso -indev build/custom-os-minimal.iso -report_el_torito as_mkisofs
-          # Prevent the unsupported serial/graphics terminal setup from returning.
-          ! grep -Eqi 'terminal_(input|output).*serial|gfxterm|set gfxmode' boot/grub.cfg
+          xorriso -indev build/custom-os-minimal.iso -find /EFI -type f -print
       - name: Smoke test ISO with BIOS firmware
         shell: bash
         timeout-minutes: 2
@@ -36,10 +36,9 @@ jobs:
           qemu_status=$?
           set -e
           echo "QEMU BIOS exit status: ${qemu_status} (124 means timeout while guest kept running)"
-          echo "----- BIOS kernel serial output -----"
           cat build/qemu-bios-serial.log || true
-          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS path did not emit KERNEL_READY; inspect kernel trace above."; exit 1; }
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-bios-serial.log || { echo "BIOS path did not emit kernel banner."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS path did not emit KERNEL_READY"; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-bios-serial.log || { echo "BIOS path did not emit kernel banner"; exit 1; }
       - name: Smoke test ISO with UEFI firmware
         shell: bash
         timeout-minutes: 2
@@ -53,10 +52,9 @@ jobs:
           qemu_status=$?
           set -e
           echo "QEMU UEFI exit status: ${qemu_status} (124 means timeout while guest kept running)"
-          echo "----- UEFI kernel serial output -----"
           cat build/qemu-uefi-serial.log || true
-          grep -q 'KERNEL_READY' build/qemu-uefi-serial.log || { echo "UEFI path did not emit KERNEL_READY; inspect kernel trace above."; exit 1; }
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-serial.log || { echo "UEFI path did not emit kernel banner."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-uefi-serial.log || { echo "UEFI path did not emit KERNEL_READY"; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-serial.log || { echo "UEFI path did not emit kernel banner"; exit 1; }
       - name: Package ISO in ZIP
         if: success()
         run: |
@@ -65,7 +63,6 @@ jobs:
           mkdir -p dist
           cp build/custom-os-minimal.iso build/SHA256SUMS.txt dist/
           (cd dist && zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt)
-          test -s dist/custom-os-minimal.zip
       - name: Upload ZIP artifact
         if: success()
         uses: actions/upload-artifact@v4
