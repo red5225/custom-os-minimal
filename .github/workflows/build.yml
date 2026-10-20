@@ -1,0 +1,142 @@
+name: Build ISO and USB Image
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools dosfstools fdisk qemu-system-x86 ovmf zip
+      - name: Build kernel, ISO, and GPT/EFI USB image
+        run: |
+          set -euxo pipefail
+          make clean
+          make all
+          test -s build/kernel.elf
+          test -s build/custom-os-minimal.iso
+          test -s build/custom-os-minimal.img
+          test -s build/BOOTX64.EFI
+          grub-file --is-x86-multiboot2 build/kernel.elf
+          file build/kernel.elf build/BOOTX64.EFI build/custom-os-minimal.iso build/custom-os-minimal.img
+          fdisk -l build/custom-os-minimal.img | tee build/disk-layout-verified.txt
+          grep -qi 'EFI System' build/disk-layout-verified.txt
+          mdir -i build/esp.img ::/EFI/BOOT
+          mdir -i build/esp.img ::/boot
+          xorriso -indev build/custom-os-minimal.iso -report_el_torito as_mkisofs
+      - name: Smoke test ISO with BIOS firmware
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -uo pipefail
+          set +e
+          timeout 12s qemu-system-x86_64 -machine pc -m 256M -cdrom build/custom-os-minimal.iso -boot d -display none -serial file:build/qemu-bios-serial.log -monitor none -no-reboot -no-shutdown
+          qemu_status=$?
+          set -e
+          echo "QEMU BIOS ISO exit status: $qemu_status (124 is expected when guest keeps running)"
+          cat build/qemu-bios-serial.log || true
+          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS ISO did not emit KERNEL_READY"; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-bios-serial.log || { echo "BIOS ISO did not emit kernel banner"; exit 1; }
+      - name: Smoke test GPT/EFI USB image with UEFI firmware
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -uo pipefail
+          OVMF_CODE=$(find /usr/share -name 'OVMF_CODE_4M.fd' -print -quit)
+          OVMF_VARS=$(find /usr/share -name 'OVMF_VARS_4M.fd' -print -quit)
+          if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then
+            OVMF_CODE=$(find /usr/share -name 'OVMF_CODE.fd' -print -quit)
+            OVMF_VARS=$(find /usr/share -name 'OVMF_VARS.fd' -print -quit)
+          fi
+          if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then echo 'Matching OVMF CODE/VARS pair not found'; find /usr/share -iname '*ovmf*' -print; exit 1; fi
+          cp "$OVMF_VARS" build/OVMF_VARS_USB.fd
+          set +e
+          timeout 15s qemu-system-x86_64 -machine q35 -m 256M -cpu qemu64 \
+            -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+            -drive if=pflash,format=raw,file=build/OVMF_VARS_USB.fd \
+            -drive if=none,id=osdisk,format=raw,file=build/custom-os-minimal.img \
+            -device ide-hd,drive=osdisk,bootindex=1 \
+            -display none -serial file:build/qemu-uefi-disk-serial.log -monitor none -no-reboot
+          qemu_status=$?
+          set -e
+          echo "QEMU UEFI disk exit status: $qemu_status (124 is expected when guest keeps running)"
+          cat build/qemu-uefi-disk-serial.log || true
+          grep -q 'KERNEL_READY' build/qemu-uefi-disk-serial.log || { echo 'UEFI GPT/EFI image did not emit KERNEL_READY'; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-disk-serial.log || { echo 'UEFI GPT/EFI image did not emit kernel banner'; exit 1; }
+      - name: Smoke test ISO with UEFI firmware
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -uo pipefail
+          OVMF_CODE=$(find /usr/share -name 'OVMF_CODE_4M.fd' -print -quit)
+          OVMF_VARS=$(find /usr/share -name 'OVMF_VARS_4M.fd' -print -quit)
+          if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then
+            OVMF_CODE=$(find /usr/share -name 'OVMF_CODE.fd' -print -quit)
+            OVMF_VARS=$(find /usr/share -name 'OVMF_VARS.fd' -print -quit)
+          fi
+          if [ -z "$OVMF_CODE" ] || [ -z "$OVMF_VARS" ]; then echo 'Matching OVMF CODE/VARS pair not found'; exit 1; fi
+          cp "$OVMF_VARS" build/OVMF_VARS_ISO.fd
+          set +e
+          timeout 12s qemu-system-x86_64 -machine q35 -m 256M -cpu qemu64 \
+            -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+            -drive if=pflash,format=raw,file=build/OVMF_VARS_ISO.fd \
+            -drive if=none,id=oscd,media=cdrom,format=raw,file=build/custom-os-minimal.iso \
+            -device ide-cd,drive=oscd,bootindex=1 \
+            -display none -serial file:build/qemu-uefi-iso-serial.log -monitor none -no-reboot
+          qemu_status=$?
+          set -e
+          echo "QEMU UEFI ISO exit status: $qemu_status (124 is expected when guest keeps running)"
+          cat build/qemu-uefi-iso-serial.log || true
+          grep -q 'KERNEL_READY' build/qemu-uefi-iso-serial.log || { echo 'UEFI ISO did not emit KERNEL_READY'; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-iso-serial.log || { echo 'UEFI ISO did not emit kernel banner'; exit 1; }
+      - name: Package ISO and USB image in ZIP
+        if: success()
+        run: |
+          set -euxo pipefail
+          sha256sum build/custom-os-minimal.iso build/custom-os-minimal.img > build/SHA256SUMS.txt
+          mkdir -p dist
+          cp build/custom-os-minimal.iso build/custom-os-minimal.img build/SHA256SUMS.txt dist/
+          (cd dist && zip -9 custom-os-minimal.zip custom-os-minimal.iso custom-os-minimal.img SHA256SUMS.txt)
+          test -s dist/custom-os-minimal.zip
+      - name: Upload ZIP artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-os-minimal-zip
+          path: dist/custom-os-minimal.zip
+          if-no-files-found: error
+      - name: Upload ISO artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-os-minimal-iso
+          path: build/custom-os-minimal.iso
+          if-no-files-found: error
+      - name: Upload raw USB image artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-os-minimal-usb-image
+          path: build/custom-os-minimal.img
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Custom OS Minimal build ${{ github.run_number }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+            QEMU smoke checks are included; physical Chromebook compatibility is not guaranteed.
+          files: |
+            build/custom-os-minimal.iso
+            build/custom-os-minimal.img
+            dist/custom-os-minimal.zip
