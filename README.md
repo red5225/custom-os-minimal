@@ -1,32 +1,52 @@
 # Custom OS Minimal
 
-A small freestanding x86-64 kernel with a simple text shell. GitHub Actions builds an ISO and packages it in a ZIP.
+A tiny educational x86-64 operating-system kernel with a text terminal. It is designed to be read and changed by a beginner learning C. The kernel is freestanding: it does not use Linux or another operating-system kernel.
 
-## Source layout
+> **Status:** experimental learning project. A successful GitHub build is not proof that every physical Chromebook will boot it. Back up important data and do not change firmware or disable device protections just to test this project.
 
-The kernel is split into small files so each part has one job:
+## Start here
 
-- `kernel/boot.S` — CPU startup, switches to 64-bit mode, passes GRUB boot information to C.
-- `kernel/kernel.c` — main entry point; connects boot info, screen, serial output and shell.
-- `kernel/bootinfo.c` — reads GRUB's Multiboot2 framebuffer information.
-- `kernel/console.c` — writes characters to the framebuffer when provided, otherwise tries VGA text memory.
-- `kernel/keyboard.c` — basic US keyboard mapping using legacy PS/2 scancodes.
-- `kernel/serial.c` — COM1 output used by QEMU's automated smoke test.
-- `kernel/shell.c` — command prompt and command handling.
-- `kernel/include/` — small header files that describe module interfaces.
-- `boot/grub.cfg` — bootloader menu and text-mode preference.
-- `Makefile` — build steps and ISO packaging.
+1. Read [`docs/START_HERE.md`](docs/START_HERE.md).
+2. Read [`docs/FILE_GUIDE.md`](docs/FILE_GUIDE.md) before editing files.
+3. Follow [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) to build and test in a virtual machine first.
+4. Use [`docs/SAFE_CHANGES.md`](docs/SAFE_CHANGES.md) for the safe change-and-undo workflow.
+5. Use [`docs/ADD_FEATURES.md`](docs/ADD_FEATURES.md) when adding commands or kernel features.
 
-## Build and test
+## What is included
 
-GitHub Actions runs `make iso`, then starts the image in QEMU and checks for the kernel startup message. Download `custom-os-minimal-zip` from the [Actions page](https://github.com/red5225/custom-os-minimal/actions); the ZIP contains the ISO and SHA-256 checksum.
+- Multiboot2 entry code that switches the CPU into 64-bit mode.
+- A small C kernel, a text console, serial diagnostics, a basic PS/2 keyboard reader and a simple command shell.
+- A GRUB boot menu and a GitHub Actions workflow that builds an ISO, smoke-tests it in QEMU, and packages the ISO plus SHA-256 checksum in a ZIP.
+- Beginner documentation in `docs/` and code comments in the kernel modules.
 
-## Important limitations
+## What is not included yet
 
-- A successful QEMU smoke test does not prove the ISO boots on the Acer Chromebook CB314-3H-C4V5.
-- The framebuffer is only used if GRUB supplies a compatible 32-bit framebuffer. VGA is a fallback, but modern UEFI systems may not expose legacy VGA text memory.
-- Keyboard input currently requires a legacy PS/2-compatible controller. Some Chromebook firmware/hardware configurations do not expose one to the kernel.
-- There is no filesystem, USB driver, network stack, or persistent storage yet.
-- The shell currently supports `help`, `about`, and `clear`.
+No filesystem, disk driver, USB driver, Wi-Fi/network stack, audio, multitasking, users, permissions, package manager, or persistent settings. The keyboard reader uses legacy PS/2 ports, which may not be exposed on a modern Chromebook. The framebuffer console is intentionally small and supports only a few punctuation characters.
 
-The project is intentionally minimal and should be extended one hardware interface at a time, with each change tested in QEMU before testing physical hardware.
+## Repository map
+
+- `kernel/boot.S`: CPU startup and transition to 64-bit mode.
+- `kernel/kernel.c`: kernel entry point and startup sequence.
+- `kernel/bootinfo.c`: reads bootloader-provided framebuffer details.
+- `kernel/console.c`: writes text to the display.
+- `kernel/serial.c`: sends diagnostic text to the emulated serial port.
+- `kernel/keyboard.c`: polls a basic PS/2 keyboard.
+- `kernel/shell.c`: handles commands typed at the prompt.
+- `kernel/include/`: declarations shared between modules.
+- `boot/grub.cfg`: GRUB menu and Multiboot2 loader command.
+- `linker.ld`: tells the linker where kernel sections belong in memory.
+- `Makefile`: repeatable build steps.
+- `.github/workflows/build.yml`: automated build, QEMU smoke test and ZIP artifacts.
+- `docs/`: beginner guides and detailed file documentation.
+
+## Build output
+
+The workflow uploads two artifacts when all required checks pass: `custom-os-minimal-zip` and `custom-os-minimal-iso`. Download them from the successful run's **Artifacts** section. The ZIP contains `custom-os-minimal.iso` and `SHA256SUMS.txt`.
+
+## Safety rules
+
+- Build and test in QEMU before testing hardware.
+- Do not flash an ISO to your computer's internal drive.
+- Do not change Chromebook firmware, write protection, or security settings as part of normal code debugging.
+- Change one small thing at a time and keep commits so you can revert.
+- Read the workflow result; never assume an artifact exists just because a workflow started.
