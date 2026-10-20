@@ -17,7 +17,6 @@ mb2_header_start:
     .long 8
 mb2_header_end:
 
-/* One-character markers are written to COM1 so QEMU shows the exact stage. */
 .macro serial_mark code
     mov $0x3F8, %dx
     mov $\code, %al
@@ -28,7 +27,10 @@ mb2_header_end:
 .align 4096
 pml4: .skip 4096
 pdpt: .skip 4096
-pd:   .skip 4096
+pd0:  .skip 4096
+pd1:  .skip 4096
+pd2:  .skip 4096
+pd3:  .skip 4096
 .align 16
 stack_bottom: .skip 16384
 stack_top:
@@ -44,48 +46,57 @@ _start:
     mov %ebx, %esi
     serial_mark 'A'
 
+    /* Clear PML4, PDPT and all four page directories (24 KiB). */
     cld
     mov $pml4, %edi
     xor %eax, %eax
-    mov $3072, %ecx
+    mov $6144, %ecx
     rep stosl
 
-    mov $pdpt, %eax
-    or $3, %eax
-    mov %eax, pml4
-    mov $pd, %eax
+    /* Four PDPT entries map four consecutive 1 GiB ranges. */
+    mov $pd0, %eax
     or $3, %eax
     mov %eax, pdpt
+    mov $pd1, %eax
+    or $3, %eax
+    mov %eax, pdpt+8
+    mov $pd2, %eax
+    or $3, %eax
+    mov %eax, pdpt+16
+    mov $pd3, %eax
+    or $3, %eax
+    mov %eax, pdpt+24
 
+    /* Fill the contiguous four page directories with 2 MiB pages. */
     xor %ecx, %ecx
 1:
     mov %ecx, %eax
     shl $21, %eax
     or $0x83, %eax
-    mov %eax, pd(,%ecx,8)
-    movl $0, pd+4(,%ecx,8)
+    mov %eax, pd0(,%ecx,8)
+    movl $0, pd0+4(,%ecx,8)
     inc %ecx
-    cmp $512, %ecx
+    cmp $2048, %ecx
     jne 1b
     serial_mark 'B'
 
     /* Clear EM and TS; enable MP, PAE, OSFXSR and OSXMMEXCPT. */
     mov %cr0, %eax
-    and $0xFFFFFFF3, %eax       /* CR0.EM = 0, CR0.TS = 0 */
-    or $0x00000002, %eax        /* CR0.MP = 1 */
+    and $0xFFFFFFF3, %eax
+    or $0x00000002, %eax
     mov %eax, %cr0
     mov %cr4, %eax
-    or $0x00000620, %eax        /* PAE | OSFXSR | OSXMMEXCPT */
+    or $0x00000620, %eax
     mov %eax, %cr4
 
     mov $pml4, %eax
     mov %eax, %cr3
     mov $0xC0000080, %ecx
     rdmsr
-    or $0x100, %eax             /* EFER.LME */
+    or $0x100, %eax
     wrmsr
     mov %cr0, %eax
-    or $0x80000000, %eax        /* CR0.PG */
+    or $0x80000000, %eax
     mov %eax, %cr0
     serial_mark 'C'
 
