@@ -20,13 +20,13 @@ jobs:
           sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 zip
 
       - name: Build kernel and ISO
-        shell: bash
         run: |
           set -euxo pipefail
           make clean
           make iso
           test -s build/kernel.elf
           test -s build/custom-os-minimal.iso
+          file build/kernel.elf build/custom-os-minimal.iso
 
       - name: Smoke test in QEMU
         shell: bash
@@ -34,18 +34,25 @@ jobs:
         run: |
           set -uo pipefail
           set +e
-          timeout 15s qemu-system-x86_64 -machine q35 -m 256M \
-            -cdrom build/custom-os-minimal.iso -display none \
-            -serial stdio -monitor none -no-reboot > build/qemu-smoke.log 2>&1
+          timeout 12s qemu-system-x86_64 \
+            -machine q35 -m 256M \
+            -cdrom build/custom-os-minimal.iso \
+            -display none -serial file:build/qemu-serial.log \
+            -monitor none -no-reboot -no-shutdown
           qemu_status=$?
           set -e
-          cat build/qemu-smoke.log
-          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then
-            echo "QEMU exited unexpectedly with status $qemu_status"
-            exit "$qemu_status"
+          echo "QEMU exit status: ${qemu_status} (124 is expected when the kernel keeps running)"
+          echo "----- QEMU serial output -----"
+          if [ -f build/qemu-serial.log ]; then cat build/qemu-serial.log; else echo "Serial log file was not created"; fi
+          echo "------------------------------"
+          # A timeout is normal for an OS shell that intentionally does not exit.
+          if [ "${qemu_status}" -ne 0 ] && [ "${qemu_status}" -ne 124 ]; then
+            echo "QEMU exited unexpectedly"
+            exit "${qemu_status}"
           fi
-          grep -q 'KERNEL_READY' build/qemu-smoke.log
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-smoke.log
+          test -s build/qemu-serial.log || { echo "No serial output: the kernel may not have reached C startup."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Missing KERNEL_READY marker; inspect serial output above."; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log || { echo "Missing terminal banner; inspect serial output above."; exit 1; }
 
       - name: Package ISO in ZIP
         run: |
@@ -54,9 +61,8 @@ jobs:
           mkdir -p dist
           cp build/custom-os-minimal.iso dist/
           cp build/SHA256SUMS.txt dist/
-          cd dist
-          zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt
-          test -s custom-os-minimal.zip
+          (cd dist && zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt)
+          test -s dist/custom-os-minimal.zip
 
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
