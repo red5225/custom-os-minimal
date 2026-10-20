@@ -72,7 +72,7 @@ _start:
     or $3, %eax
     mov %eax, pdpt+24
 
-    /* Fill the contiguous four page directories with 2 MiB pages. */
+    /* Fill the first page directory with 2 MiB pages (identity-map 1 GiB). */
     xor %ecx, %ecx
 1:
     mov %ecx, %eax
@@ -81,7 +81,7 @@ _start:
     mov %eax, pd0(,%ecx,8)
     movl $0, pd0+4(,%ecx,8)
     inc %ecx
-    cmp $2048, %ecx
+    cmp $512, %ecx
     jne 1b
     serial_mark 'B'
 
