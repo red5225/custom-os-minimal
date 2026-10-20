@@ -6,7 +6,7 @@ mb2_header_start:
     .long mb2_header_end - mb2_header_start
     .long -(0xE85250D6 + 0 + (mb2_header_end - mb2_header_start))
 
-    /* Ask GRUB for a 32-bit RGB framebuffer when one is available. */
+    /* Request a 32-bit RGB framebuffer when available. */
     .short 5
     .short 0
     .long 20
@@ -36,26 +36,25 @@ _start:
     cli
     mov $stack_top, %esp
 
-    /* Preserve GRUB's Multiboot2 magic and information pointer. */
+    /* Preserve the Multiboot2 magic (EAX) and info pointer (EBX). */
     mov %eax, %ebp
     mov %ebx, %esi
 
+    /* Clear PML4, PDPT and page directory (three 4 KiB pages). */
     cld
     mov $pml4, %edi
     xor %eax, %eax
     mov $3072, %ecx
     rep stosl
 
-    /* Identity-map the first 1 GiB using 2 MiB pages. */
+    /* Map the first 1 GiB using 2 MiB identity-mapped pages. */
     mov $pdpt, %eax
     or $3, %eax
     mov %eax, pml4
-    movl $0, pml4+4
 
     mov $pd, %eax
     or $3, %eax
     mov %eax, pdpt
-    movl $0, pdpt+4
 
     xor %ecx, %ecx
 1:
@@ -68,21 +67,27 @@ _start:
     cmp $512, %ecx
     jne 1b
 
-    /* Enable PAE, long mode and paging. */
+    /* Enable PAE plus OS support for SSE/SSE2 used by x86-64 C code. */
+    mov %cr0, %eax
+    and $0xFFFFFFFB, %eax       /* CR0.EM = 0 */
+    or $0x00000002, %eax        /* CR0.MP = 1 */
+    mov %eax, %cr0
+
     mov %cr4, %eax
-    or $0x20, %eax
+    or $0x00000620, %eax        /* PAE | OSFXSR | OSXMMEXCPT */
     mov %eax, %cr4
 
     mov $pml4, %eax
     mov %eax, %cr3
 
+    /* Enter IA-32e long mode. */
     mov $0xC0000080, %ecx
     rdmsr
-    or $0x100, %eax
+    or $0x100, %eax             /* EFER.LME */
     wrmsr
 
     mov %cr0, %eax
-    or $0x80000001, %eax
+    or $0x80000000, %eax        /* CR0.PG; PE is already set by GRUB */
     mov %eax, %cr0
 
     lgdt gdt64_pointer
@@ -99,7 +104,7 @@ long_mode_start:
     mov %ax, %gs
     mov $stack_top, %rsp
 
-    /* C arguments: RDI = boot magic, RSI = info pointer. */
+    /* System V x86-64 args: RDI=Multiboot2 magic, RSI=info address. */
     mov %ebp, %edi
     mov %esi, %esi
     xor %ebp, %ebp
