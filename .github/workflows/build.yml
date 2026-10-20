@@ -1,24 +1,19 @@
 name: Build ISO and ZIP
-
 on:
   push:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential grub-pc-bin grub-efi-amd64-bin xorriso mtools qemu-system-x86 ovmf zip
-
       - name: Build kernel and ISO
         run: |
           set -euxo pipefail
@@ -26,9 +21,23 @@ jobs:
           make iso
           test -s build/kernel.elf
           test -s build/custom-os-minimal.iso
-          file build/kernel.elf build/custom-os-minimal.iso
           grub-file --is-x86-multiboot2 build/kernel.elf
-
+          file build/kernel.elf build/custom-os-minimal.iso
+          xorriso -indev build/custom-os-minimal.iso -report_el_torito as_mkisofs
+      - name: Smoke test ISO with BIOS firmware
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -uo pipefail
+          set +e
+          timeout 12s qemu-system-x86_64 -machine pc -m 256M -cdrom build/custom-os-minimal.iso -boot d -display none -serial file:build/qemu-bios-serial.log -monitor none -no-reboot -no-shutdown
+          qemu_status=$?
+          set -e
+          echo "QEMU BIOS exit status: ${qemu_status} (124 means timeout while guest kept running)"
+          echo "----- BIOS/GRUB/kernel serial output -----"
+          cat build/qemu-bios-serial.log || true
+          grep -q 'KERNEL_READY' build/qemu-bios-serial.log || { echo "BIOS path did not emit KERNEL_READY; inspect trace above."; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-bios-serial.log || { echo "BIOS path did not emit kernel banner."; exit 1; }
       - name: Smoke test ISO with UEFI firmware
         shell: bash
         timeout-minutes: 2
@@ -36,35 +45,27 @@ jobs:
           set -uo pipefail
           OVMF_CODE="/usr/share/OVMF/OVMF_CODE.fd"
           if [ ! -f "$OVMF_CODE" ]; then OVMF_CODE="/usr/share/OVMF/OVMF_CODE_4M.fd"; fi
-          if [ ! -f "$OVMF_CODE" ]; then find /usr/share -iname '*OVMF*fd' -print || true; exit 1; fi
+          if [ ! -f "$OVMF_CODE" ]; then find /usr/share -iname '*OVMF*fd' -print; exit 1; fi
           set +e
-          timeout 15s qemu-system-x86_64 \
-            -machine q35 -m 256M \
-            -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-            -cdrom build/custom-os-minimal.iso \
-            -display none -serial file:build/qemu-serial.log \
-            -monitor none -no-reboot -no-shutdown
+          timeout 12s qemu-system-x86_64 -machine q35 -m 256M -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" -cdrom build/custom-os-minimal.iso -display none -serial file:build/qemu-uefi-serial.log -monitor none -no-reboot -no-shutdown
           qemu_status=$?
           set -e
-          echo "QEMU exit status: ${qemu_status} (124 is expected for a running kernel)"
+          echo "QEMU UEFI exit status: ${qemu_status} (124 means timeout while guest kept running)"
           echo "----- UEFI/GRUB/kernel serial output -----"
-          if [ -f build/qemu-serial.log ]; then cat build/qemu-serial.log; else echo "No serial log file"; fi
-          echo "------------------------------------------"
-          if [ "$qemu_status" -ne 0 ] && [ "$qemu_status" -ne 124 ]; then exit "$qemu_status"; fi
-          grep -q 'KERNEL_READY' build/qemu-serial.log || { echo "Kernel did not emit KERNEL_READY; use the GRUB serial trace above to locate handoff failure."; exit 1; }
-          grep -q 'CUSTOM OS MINIMAL' build/qemu-serial.log || { echo "Kernel did not emit its banner."; exit 1; }
-
+          cat build/qemu-uefi-serial.log || true
+          grep -q 'GRUB_CONFIG_LOADED' build/qemu-uefi-serial.log || { echo "UEFI did not reach the GRUB menuentry; inspect EFI boot image and config."; exit 1; }
+          grep -q 'MULTIBOOT2_LOAD_OK' build/qemu-uefi-serial.log || { echo "UEFI GRUB could not load kernel using Multiboot2."; exit 1; }
+          grep -q 'KERNEL_READY' build/qemu-uefi-serial.log || { echo "UEFI path did not emit KERNEL_READY after GRUB handoff."; exit 1; }
+          grep -q 'CUSTOM OS MINIMAL' build/qemu-uefi-serial.log || { echo "UEFI path did not emit kernel banner."; exit 1; }
       - name: Package ISO in ZIP
         if: success()
         run: |
           set -euxo pipefail
           sha256sum build/custom-os-minimal.iso > build/SHA256SUMS.txt
           mkdir -p dist
-          cp build/custom-os-minimal.iso dist/
-          cp build/SHA256SUMS.txt dist/
+          cp build/custom-os-minimal.iso build/SHA256SUMS.txt dist/
           (cd dist && zip -9 custom-os-minimal.zip custom-os-minimal.iso SHA256SUMS.txt)
           test -s dist/custom-os-minimal.zip
-
       - name: Upload ZIP artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -72,7 +73,6 @@ jobs:
           name: custom-os-minimal-zip
           path: dist/custom-os-minimal.zip
           if-no-files-found: error
-
       - name: Upload ISO artifact
         if: success()
         uses: actions/upload-artifact@v4
