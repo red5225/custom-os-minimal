@@ -2,11 +2,10 @@
 #include "include/boot_sequence.h"
 #include "include/console.h"
 
-/*
- * Native, freestanding C version of the os-ios-macos-alike boot concept.
- * The desktop prototype uses SDL2, which cannot run inside this kernel.
- * This version uses the kernel console and has no hosted-library dependency.
- */
+#define BOOT_BLACK 0xFF000000u
+#define BOOT_WHITE 0xFFFFFFFFu
+
+/* Freestanding startup UI: black background, white text. */
 static void short_pause(void)
 {
     for (volatile uint32_t i = 0; i < 18000000u; ++i) {
@@ -25,18 +24,14 @@ void boot_sequence_run(void)
         "STARTUP COMPLETE!"
     };
     static const char *const bars[] = {
-        ">",
-        ">>>>",
-        ">>>>>>>>",
-        ">>>>>>>>>>>>",
-        ">>>>>>>>>>>>>>>>",
-        ">>>>>>>>>>>>>>>>>>>>"
+        ">", ">>>> ", ">>>>>>>> ", ">>>>>>>>>>>> ",
+        ">>>>>>>>>>>>>>>> ", ">>>>>>>>>>>>>>>>>>>>",
     };
 
+    console_set_colors(BOOT_BLACK, BOOT_WHITE);
     for (uint32_t step = 0; step < 6; ++step) {
         console_clear();
-        console_write("\n\n");
-        console_write("       CUSTOM OS\n");
+        console_write("\n\n       CUSTOM OS\n");
         console_write("       ----------\n\n");
         console_write("       SYSTEM STARTUP\n\n");
         console_write("       PROGRESS: ");

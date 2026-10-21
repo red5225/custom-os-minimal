@@ -10,7 +10,6 @@ void shell_run(void);
 /* C entry point called by kernel/boot.S. */
 void kernel_main(uint32_t boot_magic, uint32_t boot_info_address)
 {
-    /* Emit an early marker before any subsystem initialization. */
     __asm__ volatile (
         "movb $'C', %%al\n\t"
         "movw $0x3F8, %%dx\n\t"
@@ -20,25 +19,23 @@ void kernel_main(uint32_t boot_magic, uint32_t boot_info_address)
 
     struct boot_framebuffer framebuffer = {0};
     const struct boot_framebuffer *screen = 0;
-
     serial_init();
     serial_write("Kernel entered C code.\n");
 
-    if (bootinfo_find_framebuffer(boot_magic, boot_info_address,
-                                  &framebuffer)) {
+    if (bootinfo_find_framebuffer(boot_magic, boot_info_address, &framebuffer)) {
         screen = &framebuffer;
         serial_write("Framebuffer information found.\n");
     } else {
         serial_write("No compatible framebuffer; using VGA fallback.\n");
     }
 
+    /* Startup is the first visible OS UI; do not print the shell beforehand. */
     console_init(screen);
     serial_write("KERNEL_READY\nCUSTOM OS MINIMAL\n");
-
-    /* Freestanding C port of the macOS-alike boot animation design.
-       SDL2 is intentionally not linked into the kernel. */
     boot_sequence_run();
 
+    /* Switch theme only after startup completes. */
+    console_set_colors(0xFFF28C28u, 0xFF000000u);
     console_clear();
     console_write("CUSTOM OS MINIMAL\n");
     console_write("-----------------\n");
