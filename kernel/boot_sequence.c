@@ -9,7 +9,7 @@
  */
 static void short_pause(void)
 {
-    for (volatile uint32_t i = 0; i < 350000u; ++i) {
+    for (volatile uint32_t i = 0; i < 18000000u; ++i) {
         __asm__ volatile ("" ::: "memory");
     }
 }
@@ -17,12 +17,12 @@ static void short_pause(void)
 void boot_sequence_run(void)
 {
     static const char *const stages[] = {
-        "INITIALIZING FIRMWARE",
-        "CHECKING MEMORY",
-        "STARTING KERNEL",
-        "INITIALIZING DISPLAY",
-        "PREPARING SYSTEM",
-        "STARTUP COMPLETE"
+        "INITIALIZING FIRMWARE...",
+        "CHECKING MEMORY...",
+        "STARTING KERNEL...",
+        "INITIALIZING DISPLAY...",
+        "PREPARING SYSTEM...",
+        "STARTUP COMPLETE!"
     };
     static const char *const bars[] = {
         ">",
@@ -39,7 +39,7 @@ void boot_sequence_run(void)
         console_write("       CUSTOM OS\n");
         console_write("       ----------\n\n");
         console_write("       SYSTEM STARTUP\n\n");
-        console_write("       ");
+        console_write("       PROGRESS: ");
         console_write(bars[step]);
         console_write("\n\n       ");
         console_write(stages[step]);
