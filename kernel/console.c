@@ -106,6 +106,29 @@ void console_clear(void)
     }
 }
 
+static void console_scroll_up(void)
+{
+    if (use_framebuffer) {
+        if (screen.height <= 12) { console_clear(); return; }
+        for (uint32_t y = 12; y < screen.height; ++y) {
+            volatile uint32_t *dst = (volatile uint32_t *)((uintptr_t)screen.address + (uintptr_t)(y - 12) * screen.pitch);
+            volatile uint32_t *srcp = (volatile uint32_t *)((uintptr_t)screen.address + (uintptr_t)y * screen.pitch);
+            for (uint32_t x = 0; x < screen.pitch / 4u; ++x) dst[x] = srcp[x];
+        }
+        for (uint32_t y = screen.height - 12; y < screen.height; ++y)
+            for (uint32_t x = 0; x < screen.width; ++x) put_pixel(x, y, background_rgb);
+        row = screen.height / 12 - 1;
+    } else {
+        for (size_t y = 1; y < VGA_ROWS; ++y)
+            for (size_t x = 0; x < VGA_COLUMNS; ++x)
+                VGA_MEMORY[(y - 1) * VGA_COLUMNS + x] = VGA_MEMORY[y * VGA_COLUMNS + x];
+        uint8_t attr = background_rgb == SHELL_BACKGROUND_RGB ? 0xE0u : 0x0Fu;
+        for (size_t x = 0; x < VGA_COLUMNS; ++x)
+            VGA_MEMORY[(VGA_ROWS - 1) * VGA_COLUMNS + x] = ((uint16_t)attr << 8) | ' ';
+        row = VGA_ROWS - 1;
+    }
+}
+
 void console_putc(char character)
 {
     if (character == '\r') {
@@ -132,7 +155,7 @@ void console_putc(char character)
         }
     }
     if (row >= (use_framebuffer ? screen.height / 12 : VGA_ROWS)) {
-        console_clear();
+        console_scroll_up();
     }
 }
 
