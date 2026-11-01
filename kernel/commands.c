@@ -44,7 +44,7 @@ static void command_about(const char *args)
     (void)args;
     console_write("\nSmall os.\n");
     console_write("\nA small freestanding x86-64 kernel and command shell.\n");
-    console_write("\nHad AI start this so I can edit it to how I like.\n");
+    console_write("\nAn independent operating system project built for continued development.\n");
 }
 
 static void command_clear(const char *args)

@@ -30,7 +30,7 @@ void shell_run(void)
 {
     console_write("\nWelcome to Custom OS Minimal\n");
     console_write("64-bit kernel command shell. Type help for commands.\n");
-    console_write("--- Had AI make the foundation of the OS.\n");
+    console_write("--- A small, independently developed x86-64 operating system.\n");
     show_prompt();
 
     for (;;) {
